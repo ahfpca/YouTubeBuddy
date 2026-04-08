@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTubeBuddy</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-logo">
+        <img src="../icons/icon32.png" alt="YouTubeBuddy" />
+        <span class="header-title">YouTubeBuddy</span>
+      </div>
+      <nav class="header-nav">
+        <button class="nav-btn active" data-tab="subtitles">Subtitles</button>
+        <button class="nav-btn" data-tab="settings">Settings</button>
+      </nav>
+    </header>
+
+    <!-- Main content -->
+    <main class="main">
+      <!-- Subtitles Tab -->
+      <section id="tab-subtitles" class="tab active">
+        <div class="section-title">Add Subtitle Language</div>
+
+        <div class="field-group">
+          <label class="field-label" for="language-select">Target Language</label>
+          <select id="language-select" class="select">
+            <option value="">— Select a language —</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Apply To</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="apply-to" value="current" checked />
+              Current video
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="apply-to" value="all" />
+              All videos in channel
+            </label>
+          </div>
+        </div>
+
+        <div id="status-banner" class="status-banner hidden"></div>
+
+        <button id="btn-run" class="btn-primary" disabled>
+          <span class="btn-icon">▶</span>
+          Add Language
+        </button>
+      </section>
+
+      <!-- Settings Tab -->
+      <section id="tab-settings" class="tab hidden">
+        <div class="section-title">Settings</div>
+        <div class="field-group">
+          <label class="field-label">Default Language</label>
+          <select id="default-language" class="select">
+            <option value="">None</option>
+          </select>
+          <p class="field-hint">Pre-selected each time you open the popup.</p>
+        </div>
+        <div class="field-group">
+          <label class="field-label">
+            <input type="checkbox" id="confirm-before-run" checked />
+            Confirm before running on multiple videos
+          </label>
+        </div>
+        <button id="btn-save-settings" class="btn-secondary">Save Settings</button>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span id="page-context" class="page-context">Not on YouTube Studio</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
