@@ -19,19 +19,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch(err  => sendResponse({ success: false, message: err.message }));
     return true; // keep channel open for async response
   }
+  if (message.action === 'GET_ALL_VIDEOS') {
+    getAllVideos()
+      .then(result => sendResponse(result))
+      .catch(err  => sendResponse({ success: false, message: err.message }));
+    return true;
+  }
 })
 
 // ── Main dispatch ─────────────────────────────────────────────────────────────
-async function handleAddSubtitleLanguage({ langCode, langLabel, applyTo }) {
-  if (applyTo !== 'current') {
-    return { success: false, message: 'All-videos mode is not yet implemented.' };
-  }
-  return handleCurrentVideo(langCode, langLabel);
+async function handleAddSubtitleLanguage({ langCode, langLabel, silent = false }) {
+  return handleCurrentVideo(langCode, langLabel, silent);
 }
 
 // ── Current video workflow ────────────────────────────────────────────────────
-async function handleCurrentVideo(langCode, langLabel) {
-  if (/studio\.youtube\.com\/channel\/[^/]+(?:\/videos|\/shorts|$|\?)/.test(location.href)) {
+async function handleCurrentVideo(langCode, langLabel, silent = false) {
+  // Guard only applies for manual single-video use (not when called silently by background).
+  if (!silent && /studio\.youtube\.com\/channel\/[^/]+(?:\/videos|\/shorts|$|\?)/.test(location.href)) {
     return {
       success: false,
       message: "You're on the Channel content page. Please click on a video title to open it, then try again.",
@@ -45,6 +49,12 @@ async function handleCurrentVideo(langCode, langLabel) {
     log('Step 2 — Navigate to Subtitles');
     await stepGoToSubtitles();
 
+    // Skip check — if the target language already has subtitles, do nothing.
+    if (hasLanguageAlready(langLabel)) {
+      log(`"${langLabel}" already present — skipping`);
+      return { success: true, skipped: true, message: `"${langLabel}" already present — skipped.` };
+    }
+
     log('Step 3 — Set language (if prompted)');
     await stepMaybeSetLanguageToPersian();
 
@@ -54,8 +64,10 @@ async function handleCurrentVideo(langCode, langLabel) {
     log(`Step 5 — Add "${langLabel}" via Auto-Translate`);
     await stepAddTargetLanguage(langCode, langLabel);
 
-    log('Step 6 — Show success');
-    await stepShowSuccessAndLeave(langLabel);
+    if (!silent) {
+      log('Step 6 — Show success');
+      await stepShowSuccessAndLeave(langLabel);
+    }
 
     return { success: true, message: `"${langLabel}" subtitle added successfully.` };
   } catch (err) {
@@ -487,6 +499,99 @@ async function waitForTranslation() {
     // Spinner may not be present; continue
   }
   await sleep(1000);
+}
+
+// ── All-videos helpers ────────────────────────────────────────────────────────
+
+/**
+ * Collects all video entries from the channel content page by paginating
+ * through every page of results.  Returns { success, videos, total }.
+ */
+async function getAllVideos() {
+  if (!/studio\.youtube\.com\/channel\/[^/]+(?:\/videos|\/shorts)/.test(location.href)) {
+    return {
+      success: false,
+      message: 'Please navigate to the Channel content page (Videos tab) first.',
+    };
+  }
+
+  const allVideos = [];
+  let total = null;
+
+  while (true) {
+    const { videos, total: pageTotal } = getVideoList();
+    if (total === null && pageTotal !== null) total = pageTotal;
+    allVideos.push(...videos);
+
+    const prevFirstId = videos[0]?.videoId ?? null;
+    const { hasNextPage } = clickNextPage();
+    if (!hasNextPage) break;
+
+    await waitForNextPageLoad(prevFirstId);
+    await sleep(300); // brief pause for stability
+  }
+
+  return { success: true, videos: allVideos, total: total ?? allVideos.length };
+}
+
+/** Reads the video rows on the current page. */
+function getVideoList() {
+  const rows = Array.from(document.querySelectorAll('ytcp-video-row'));
+  const videos = rows.map(row => {
+    const link = row.querySelector('a#video-title');
+    if (!link) return null;
+    const href = link.getAttribute('href'); // e.g. /video/H1KlS4MMISo/edit
+    const m = href && href.match(/\/video\/([^/]+)\//);
+    const videoId = m ? m[1] : null;
+    const title = link.getAttribute('aria-label') || link.textContent.trim();
+    return videoId ? { videoId, url: `https://studio.youtube.com${href}`, title } : null;
+  }).filter(Boolean);
+
+  const pageDesc = document.querySelector('span.page-description');
+  let total = null;
+  if (pageDesc) {
+    const m = pageDesc.textContent.match(/of (?:about )?(\d+)/);
+    if (m) total = parseInt(m[1], 10);
+  }
+
+  return { videos, total };
+}
+
+/** Clicks the "Next page" button. Returns whether there was a next page. */
+function clickNextPage() {
+  const btn = document.querySelector('ytcp-icon-button#navigate-after');
+  if (!btn || btn.getAttribute('aria-disabled') === 'true') return { hasNextPage: false };
+  btn.click();
+  return { hasNextPage: true };
+}
+
+/**
+ * Polls until the first video row on the page has a different ID than
+ * `prevFirstVideoId`, indicating the new page content has rendered.
+ */
+function waitForNextPageLoad(prevFirstVideoId, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + timeoutMs;
+    const check = () => {
+      const links = document.querySelectorAll('ytcp-video-row a#video-title');
+      if (links.length > 0) {
+        const href = links[0].getAttribute('href');
+        const m = href && href.match(/\/video\/([^/]+)\//);
+        const firstId = m ? m[1] : null;
+        if (firstId && firstId !== prevFirstVideoId) { resolve(); return; }
+      }
+      if (Date.now() > deadline) { reject(new Error('Timed out waiting for next page')); return; }
+      setTimeout(check, 300);
+    };
+    setTimeout(check, 400); // initial delay before first check
+  });
+}
+
+/** Returns true if a subtitle row for langLabel already exists on the subtitles page. */
+function hasLanguageAlready(langLabel) {
+  return Array.from(document.querySelectorAll(
+    'tr, ytcp-subtitle-row, [class*="subtitle-row"], [class*="caption-row"]'
+  )).some(r => r.textContent.includes(langLabel) && isVisible(r));
 }
 
 // ── DOM utilities ─────────────────────────────────────────────────────────────

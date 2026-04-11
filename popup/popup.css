@@ -140,6 +140,16 @@ body {
 .status-banner.error   { background: #3a1a1a; border: 1px solid #962d2d; color: #e87a7a; }
 .status-banner.running { background: #2a2a1a; border: 1px solid #6a6a2d; color: #d4d47e; }
 
+/* ── Progress text ── */
+.progress-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.progress-text.hidden { display: none; }
+
 /* ── Buttons ── */
 .btn-primary, .btn-secondary {
   border: none;
@@ -175,6 +185,31 @@ body {
 }
 
 .btn-secondary:hover { background: var(--border); }
+
+/* ── Stop button ── */
+.btn-stop {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 14px;
+  width: 100%;
+  background: var(--surface2);
+  color: var(--text-muted);
+  margin-top: 6px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn-stop:hover:not(:disabled) {
+  background: #3a1a1a;
+  border-color: #962d2d;
+  color: #e87a7a;
+}
+
+.btn-stop:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-stop.hidden { display: none; }
 
 /* ── Footer ── */
 .footer {

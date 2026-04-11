@@ -83,6 +83,8 @@ const LANGUAGES = [
 const langSelect      = document.getElementById('language-select');
 const defaultLangSel  = document.getElementById('default-language');
 const btnRun          = document.getElementById('btn-run');
+const btnStop         = document.getElementById('btn-stop');
+const progressText    = document.getElementById('progress-text');
 const statusBanner    = document.getElementById('status-banner');
 const pageContext     = document.getElementById('page-context');
 const confirmChk      = document.getElementById('confirm-before-run');
@@ -151,6 +153,37 @@ btnRun.addEventListener('click', async () => {
 
   if (!langCode) return;
 
+  // ── All-videos mode ────────────────────────────────────────────────────────
+  if (applyTo === 'all') {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (!tab?.url?.match(/studio\.youtube\.com\/channel\/[^/]+\/videos/)) {
+      showStatus('error', 'Please navigate to the Channel content page (Videos tab) first.');
+      return;
+    }
+
+    const { confirmBeforeRun } = await chrome.storage.sync.get({ confirmBeforeRun: true });
+    if (confirmBeforeRun) {
+      const ok = confirm(
+        `Add "${langLabel}" subtitles to ALL videos in this channel?\n\nYou can stop the process at any time.`
+      );
+      if (!ok) return;
+    }
+
+    btnRun.disabled = true;
+    btnStop.classList.remove('hidden');
+    progressText.classList.remove('hidden');
+    progressText.textContent = 'Collecting video list…';
+    showStatus('running', `Preparing to add "${langLabel}" to all videos…`);
+
+    chrome.runtime.sendMessage({
+      action: 'START_ALL_VIDEOS',
+      payload: { tabId: tab.id, langCode, langLabel, channelPageUrl: tab.url },
+    });
+    return;
+  }
+
+  // ── Single-video mode ──────────────────────────────────────────────────────
   btnRun.disabled = true;
   showStatus('running', `Adding "${langLabel}" subtitle track…`);
 
@@ -182,6 +215,47 @@ btnRun.addEventListener('click', async () => {
   } catch (err) {
     showStatus('error', `Error: ${err.message}`);
     btnRun.disabled = false;
+  }
+});
+
+// ── Stop button ───────────────────────────────────────────────────────────────
+btnStop.addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'STOP_ALL_VIDEOS' });
+  btnStop.disabled = true;
+  showStatus('running', 'Stopping after current video finishes…');
+});
+
+// ── Background progress messages ──────────────────────────────────────────────
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'COLLECTING') {
+    progressText.classList.remove('hidden');
+    progressText.textContent = 'Collecting video list across all pages…';
+
+  } else if (message.type === 'PROGRESS') {
+    const { processed, total, currentTitle, succeeded, skipped, failed } = message;
+    showStatus('running', `Video ${processed + 1} of ${total}: "${currentTitle}"`);
+    progressText.classList.remove('hidden');
+    progressText.textContent = `${succeeded} added  ·  ${skipped} skipped  ·  ${failed} failed`;
+
+  } else if (message.type === 'ALL_DONE') {
+    btnRun.disabled = false;
+    btnStop.classList.add('hidden');
+    btnStop.disabled = false;
+    progressText.classList.add('hidden');
+    progressText.textContent = '';
+    showStatus(message.success ? 'success' : 'error', message.message);
+
+  } else if (message.type === 'STOPPED') {
+    btnRun.disabled = false;
+    btnStop.classList.add('hidden');
+    btnStop.disabled = false;
+    progressText.classList.add('hidden');
+    progressText.textContent = '';
+    showStatus(
+      'info',
+      `Stopped after ${message.processed} videos — ` +
+      `${message.succeeded} added, ${message.skipped} skipped, ${message.failed} failed.`
+    );
   }
 });
 
