@@ -48,7 +48,7 @@ async function handleCurrentVideo(langCode, langLabel, silent = false) {
 
   try {
     log('Step 1 — Audience');
-    await stepAudience();
+    await stepAudience(channelLangLabel);
 
     log('Step 2 — Navigate to Subtitles');
     await stepGoToSubtitles();
@@ -83,8 +83,8 @@ async function handleCurrentVideo(langCode, langLabel, silent = false) {
   }
 }
 
-// ── Step 1: Audience ──────────────────────────────────────────────────────────
-async function stepAudience() {
+// ── Step 1: Audience + language settings ─────────────────────────────────────
+async function stepAudience(channelLangLabel) {
   // Ensure we're on the Details tab
   const detailsLink = findAnchorByText('Details');
   if (detailsLink) {
@@ -105,6 +105,9 @@ async function stepAudience() {
     await sleep(400);
   }
 
+  // Expand "Show more" and verify/set Video language + Title and description language.
+  await stepShowMoreAndSetLanguages(channelLangLabel);
+
   // Click Save
   const saveBtn = await waitFor(
     () => Array.from(document.querySelectorAll('ytcp-button, button'))
@@ -115,6 +118,60 @@ async function stepAudience() {
   saveBtn.click();
   log('Save clicked');
   await sleep(1500); // wait for save to complete
+}
+
+// ── Step 1b: Show more → set Video language and Title/description language ────
+async function stepShowMoreAndSetLanguages(channelLangLabel) {
+  // Click "Show more" / "Show advanced settings" if the language section is hidden.
+  const langSectionVisible = () => {
+    const el = document.querySelector('#language-subtitles-cc');
+    return el && isVisible(el);
+  };
+
+  if (!langSectionVisible()) {
+    const toggleBtn = document.querySelector('ytcp-button#toggle-button');
+    if (toggleBtn) {
+      dispatchRealClick(toggleBtn);
+      await sleep(600);
+    }
+  }
+
+  const section = await waitFor(
+    () => langSectionVisible() ? document.querySelector('#language-subtitles-cc') : null,
+    5000,
+    '"Language and captions certification" section'
+  ).catch(() => null);
+
+  if (!section) { log('Language section not visible — skipping'); return; }
+
+  // Both "Video language" and "Title and description language" dropdowns are
+  // form-language-input elements inside this section.
+  const langInputs = Array.from(section.querySelectorAll('ytcp-form-language-input'));
+
+  for (const input of langInputs) {
+    const currentText = input.querySelector('.dropdown-trigger-text')?.textContent?.trim() ?? '';
+    if (currentText === channelLangLabel) {
+      log(`Language dropdown already "${channelLangLabel}" — OK`);
+      continue;
+    }
+
+    log(`Setting language dropdown from "${currentText}" to "${channelLangLabel}"`);
+    const trigger = input.querySelector('ytcp-dropdown-trigger[role="button"]');
+    if (!trigger) continue;
+
+    dispatchRealClick(trigger);
+    await sleep(600);
+
+    const option = await waitFor(
+      () => Array.from(document.querySelectorAll(
+              'tp-yt-paper-item, ytcp-ve[role="option"], li[role="option"]'))
+            .find(i => i.textContent.trim() === channelLangLabel && isVisible(i)),
+      5000,
+      `"${channelLangLabel}" in language dropdown`
+    );
+    option.click();
+    await sleep(400);
+  }
 }
 
 // ── Step 2: Go to Subtitles tab ───────────────────────────────────────────────
