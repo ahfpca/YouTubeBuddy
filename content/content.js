@@ -302,6 +302,10 @@ async function stepAddTargetLanguage(langCode, langLabel, channelLangLabel) {
   log('Clicked Add button — waiting for subtitle editor to open');
   await sleep(1500);
 
+  // Handle the title/description translation dialog that appears before the
+  // subtitle editor (YouTube Studio asks for a translated title/description).
+  await maybeHandleTitleDescriptionDialog();
+
   // Wait up to 10 s for Auto-translate to become enabled.
   // If still disabled, signal the caller to re-navigate and retry from outside
   // the page — this avoids the browser's beforeunload dialog entirely, since
@@ -467,6 +471,102 @@ async function waitForSubtitleList() {
     if (back) { back.click(); await sleep(2000); }
   });
   await sleep(400);
+}
+
+/**
+ * Handles the "Title & Description" translation dialog that YouTube Studio
+ * shows before the subtitle editor when adding a language.
+ * Reads the disabled source fields by their stable IDs and types the text into
+ * the matching editable target fields, then clicks Publish.
+ */
+async function maybeHandleTitleDescriptionDialog() {
+  // The metadata editor custom element name is in the selector below.
+  const editor = await waitFor(
+    () => document.querySelector('ytgn-metadata-editor'),
+    2000,
+    'metadata editor element'
+  ).catch(() => null);
+
+  if (!editor) return;
+  log('Title/description dialog detected');
+
+  const srcTitle = editor.querySelector('#original-title   textarea');
+  const tgtTitle = editor.querySelector('#translated-title textarea');
+  const srcDesc  = editor.querySelector('#original-description   textarea');
+  const tgtDesc  = editor.querySelector('#translated-description textarea');
+
+  if (!tgtTitle) { log('Target title field not found — skipping'); return; }
+
+  // Give Polymer a moment to populate the disabled source fields via data binding.
+  await sleep(400);
+
+  const titleText = srcTitle?.value?.trim() ?? '';
+  const descText  = srcDesc?.value?.trim()  ?? '';
+  log(`Copying — title: "${titleText.slice(0, 60)}", desc: ${descText.length} chars`);
+
+  // Set value on both the ytcp-form-textarea Polymer component (triggers its
+  // internal observer) AND the raw textarea (triggers native validation).
+  const tgtTitleComponent = editor.querySelector('#translated-title');
+  const tgtDescComponent  = editor.querySelector('#translated-description');
+
+  if (titleText) {
+    setPolymerValue(tgtTitleComponent, titleText);
+    await typeIntoField(tgtTitle, titleText);
+  }
+  if (descText && tgtDesc) {
+    setPolymerValue(tgtDescComponent, descText);
+    await typeIntoField(tgtDesc, descText);
+  }
+
+  await sleep(300);
+
+  // Wait for Publish to become enabled once the required title is filled.
+  const publishBtn = await waitFor(
+    () => {
+      const btn = Array.from(document.querySelectorAll('ytcp-button, button'))
+        .find(b => /^publish$/i.test(b.textContent.trim()) && isVisible(b));
+      if (!btn) return null;
+      if (btn.tagName.toLowerCase() === 'button' && btn.disabled) return null;
+      if (btn.getAttribute('aria-disabled') === 'true') return null;
+      return btn;
+    },
+    8000,
+    'enabled Publish button in title/description dialog'
+  );
+  publishBtn.click();
+  log('Title/description published');
+  await sleep(1500);
+}
+
+/**
+ * Sets `value` on a Polymer component element, triggering its internal
+ * property observer so the parent form re-validates and enables Publish.
+ */
+function setPolymerValue(component, value) {
+  if (!component) return;
+  try {
+    component.value = value;
+    component.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, detail: { value } }));
+  } catch { /* ignore */ }
+}
+
+/**
+ * Types text into a textarea using execCommand so Polymer change detection
+ * fires exactly as if the user typed — enables the Publish button.
+ */
+async function typeIntoField(el, text) {
+  el.focus();
+  el.select?.();
+  el.setSelectionRange?.(0, el.value?.length ?? 0);
+  // execCommand('insertText') triggers Polymer's input listeners reliably.
+  const ok = document.execCommand('insertText', false, text);
+  if (!ok) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    if (setter) setter.call(el, text); else el.value = text;
+    el.dispatchEvent(new Event('input',  { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  el.blur();
 }
 
 async function maybeSelectTranslateFromChannelLang(channelLangLabel) {

@@ -101,6 +101,7 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
       await saveHistoryEntry(entry);
       batchActiveInThisInstance = false;
       await chrome.storage.local.set({ ytbBatchRunning: false, ytbStopRequested: false });
+      if (channelPageUrl) chrome.tabs.update(tabId, { url: channelPageUrl }).catch(() => {});
       sendProgressToPopup({ type: 'STOPPED', processed, total: videos.length, succeeded, skipped, failed });
       return;
     }
