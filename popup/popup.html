@@ -11,12 +11,13 @@
     <!-- Header -->
     <header class="header">
       <div class="header-logo">
-        <img src="../icons/icon32.png" alt="YouTubeBuddy" />
+        <img src="../icons/icon-32.png" alt="YouTubeBuddy" />
         <span class="header-title">YouTubeBuddy</span>
       </div>
       <nav class="header-nav">
         <button class="nav-btn active" data-tab="subtitles">Subtitles</button>
         <button class="nav-btn" data-tab="settings">Settings</button>
+        <button class="nav-btn" data-tab="history">History</button>
       </nav>
     </header>
 
@@ -65,11 +66,18 @@
       <section id="tab-settings" class="tab hidden">
         <div class="section-title">Settings</div>
         <div class="field-group">
-          <label class="field-label">Default Language</label>
+          <label class="field-label">Default Add Language</label>
           <select id="default-language" class="select">
             <option value="">None</option>
           </select>
           <p class="field-hint">Pre-selected each time you open the popup.</p>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Channel Language</label>
+          <select id="channel-language" class="select">
+            <option value="">— Select channel language —</option>
+          </select>
+          <p class="field-hint">The primary language of your channel (used during automation).</p>
         </div>
         <div class="field-group">
           <label class="field-label">
@@ -78,6 +86,17 @@
           </label>
         </div>
         <button id="btn-save-settings" class="btn-secondary">Save Settings</button>
+        <button id="btn-clear-cache" class="btn-secondary btn-danger">Clear Skip Cache</button>
+      </section>
+      <!-- History Tab -->
+      <section id="tab-history" class="tab hidden">
+        <div class="history-header">
+          <div class="section-title" style="margin-bottom:0">Run History</div>
+          <button id="btn-clear-history" class="btn-clear">Clear</button>
+        </div>
+        <div id="history-list">
+          <p class="history-empty">No runs yet.</p>
+        </div>
       </section>
     </main>
 

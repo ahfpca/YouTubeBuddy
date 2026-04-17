@@ -2,8 +2,28 @@
 
 const log = (...args) => console.log('[YouTubeBuddy BG]', ...args);
 
-// In-memory stop flag — valid for the lifetime of this service worker activation.
-let stopRequested = false;
+// Tracks whether a batch is running in THIS service worker instance.
+// When the service worker starts fresh this is always false — used to detect
+// stale ytbBatchRunning flags left in storage by a previously killed worker.
+let batchActiveInThisInstance = false;
+
+// On every service worker initialisation, clear any stale batch state that was
+// left behind if the previous worker was killed (browser close, extension reload, crash).
+chrome.storage.local.get({ ytbBatchRunning: false }, ({ ytbBatchRunning }) => {
+  if (ytbBatchRunning && !batchActiveInThisInstance) {
+    log('Clearing stale batch state from previous service worker instance.');
+    chrome.storage.local.set({ ytbBatchRunning: false, ytbStopRequested: false });
+  }
+});
+
+// Stop flag is persisted in storage so it survives service worker suspension.
+async function isStopRequested() {
+  const { ytbStopRequested } = await chrome.storage.local.get({ ytbStopRequested: false });
+  return ytbStopRequested;
+}
+async function setStopRequested(val) {
+  await chrome.storage.local.set({ ytbStopRequested: val });
+}
 
 // ── Extension lifecycle ───────────────────────────────────────────────────────
 chrome.runtime.onInstalled.addListener(({ reason }) => {
@@ -13,22 +33,27 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 // ── Message listener ──────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === 'START_ALL_VIDEOS') {
-    stopRequested = false;
-    runBatch(message.payload)
-      .catch(err => sendProgressToPopup({ type: 'ALL_DONE', success: false, message: err.message }));
+    setStopRequested(false).then(() => {
+      runBatch(message.payload)
+        .catch(err => sendProgressToPopup({ type: 'ALL_DONE', success: false, message: err.message }));
+    });
     sendResponse({ started: true });
     return false;
   }
   if (message.action === 'STOP_ALL_VIDEOS') {
-    stopRequested = true;
-    sendResponse({ ok: true });
-    return false;
+    setStopRequested(true).then(() => sendResponse({ ok: true }));
+    return true;
   }
 });
 
 // ── Batch orchestrator ────────────────────────────────────────────────────────
 async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
-  log('Batch started', { langLabel });
+  batchActiveInThisInstance = true;
+  const contentType = /\/shorts/.test(channelPageUrl) ? 'Shorts'
+                    : /\/live/.test(channelPageUrl)   ? 'Live'
+                    : 'Videos';
+  log('Batch started', { langLabel, contentType });
+  await chrome.storage.local.set({ ytbBatchRunning: true });
 
   // Phase 1: Collect all video URLs across all pages (content script paginates).
   sendProgressToPopup({ type: 'COLLECTING' });
@@ -45,7 +70,7 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
     return;
   }
 
-  const { videos, total } = listResult;
+  const { videos } = listResult;
   log(`Collected ${videos.length} videos`);
 
   if (videos.length === 0) {
@@ -54,15 +79,38 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
   }
 
   // Phase 2: Process each video one by one.
-  let processed = 0;
-  let succeeded = 0;
-  let skipped   = 0;
-  let failed    = 0;
+  let processed    = 0;
+  let succeeded    = 0;
+  let skipped      = 0;
+  let failed       = 0;
+  const failedTitles = [];
+  const startTime  = Date.now();
+
+  // Load the persistent skip-cache for this language.
+  const { ytbProcessedCache = [] } = await chrome.storage.local.get({ ytbProcessedCache: [] });
+  const processedCache = new Set(ytbProcessedCache);
+  const cacheKey = (video) => `${video.videoId}::${video.type ?? 'video'}::${langLabel}`;
 
   for (const video of videos) {
-    if (stopRequested) {
+    if (await isStopRequested()) {
+      const entry = {
+        type: 'bulk', date: new Date().toISOString(), langLabel, contentType,
+        processed, succeeded, skipped, failed, failedTitles,
+        durationMs: Date.now() - startTime, stopped: true,
+      };
+      await saveHistoryEntry(entry);
+      batchActiveInThisInstance = false;
+      await chrome.storage.local.set({ ytbBatchRunning: false, ytbStopRequested: false });
       sendProgressToPopup({ type: 'STOPPED', processed, total: videos.length, succeeded, skipped, failed });
       return;
+    }
+
+    // Cache hit — already processed in a previous bulk run.
+    if (processedCache.has(cacheKey(video))) {
+      skipped++;
+      processed++;
+      log(`Cache hit — skipping "${video.title}"`);
+      continue;
     }
 
     sendProgressToPopup({
@@ -75,7 +123,7 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
 
     try {
       await navigateTab(tabId, video.url);
-      await sleep(1500); // let the page settle before injecting
+      await sleep(800); // let the page settle before injecting
 
       await injectContentScript(tabId);
       const result = await sendMessageToTab(tabId, {
@@ -83,16 +131,40 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
         payload: { langCode, langLabel, applyTo: 'current', silent: true },
       });
 
+      // If Auto-translate was not ready, re-navigate (bypasses beforeunload)
+      // and try once more.
+      let finalResult = result;
+      if (result?.retryNeeded) {
+        log(`Auto-translate not ready for "${video.title}" — re-navigating and retrying`);
+        await navigateTab(tabId, video.url);
+        await sleep(800);
+        await injectContentScript(tabId);
+        finalResult = await sendMessageToTab(tabId, {
+          action: 'ADD_SUBTITLE_LANGUAGE',
+          payload: { langCode, langLabel, applyTo: 'current', silent: true },
+        });
+      }
+
       processed++;
-      if (result?.skipped)       skipped++;
-      else if (result?.success)  succeeded++;
-      else {
+      if (finalResult?.success && !finalResult?.skipped) {
+        succeeded++;
+        // Cache so future runs skip this video immediately.
+        processedCache.add(cacheKey(video));
+        await chrome.storage.local.set({ ytbProcessedCache: [...processedCache] });
+      } else if (finalResult?.skipped) {
+        skipped++;
+        // Also cache — video already had the language, no need to re-check next run.
+        processedCache.add(cacheKey(video));
+        await chrome.storage.local.set({ ytbProcessedCache: [...processedCache] });
+      } else {
         failed++;
-        log(`Failed: ${video.title} — ${result?.message}`);
+        failedTitles.push(video.title);
+        log(`Failed: ${video.title} — ${finalResult?.message}`);
       }
     } catch (err) {
       processed++;
       failed++;
+      failedTitles.push(video.title);
       log(`Error on "${video.title}": ${err.message}`);
     }
   }
@@ -101,6 +173,15 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
   if (channelPageUrl) {
     chrome.tabs.update(tabId, { url: channelPageUrl }).catch(() => {});
   }
+
+  const entry = {
+    type: 'bulk', date: new Date().toISOString(), langLabel, contentType,
+    processed, succeeded, skipped, failed, failedTitles,
+    durationMs: Date.now() - startTime, stopped: false,
+  };
+  await saveHistoryEntry(entry);
+  batchActiveInThisInstance = false;
+  await chrome.storage.local.set({ ytbBatchRunning: false, ytbStopRequested: false });
 
   sendProgressToPopup({
     type: 'ALL_DONE',
@@ -167,6 +248,16 @@ function sendMessageToTab(tabId, message) {
 function sendProgressToPopup(data) {
   // Popup may be closed — ignore connection errors.
   chrome.runtime.sendMessage(data).catch(() => {});
+}
+
+// ── History persistence ───────────────────────────────────────────────────────
+const MAX_HISTORY = 50;
+
+async function saveHistoryEntry(entry) {
+  const { ytbHistory = [] } = await chrome.storage.local.get({ ytbHistory: [] });
+  ytbHistory.unshift(entry); // newest first
+  if (ytbHistory.length > MAX_HISTORY) ytbHistory.length = MAX_HISTORY;
+  await chrome.storage.local.set({ ytbHistory });
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
