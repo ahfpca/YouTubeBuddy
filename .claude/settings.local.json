@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(perl -i -pe 's/;\\(\\\\s*\\(?:\\\\/\\\\/[^\\\\n]*\\)?\\)$/\\\\1/' /Users/arash/Projects/BrowserPlugins/YouTubeBuddy/content/content.js /Users/arash/Projects/BrowserPlugins/YouTubeBuddy/background/background.js /Users/arash/Projects/BrowserPlugins/YouTubeBuddy/popup/popup.js)"
+    ]
+  }
+}
