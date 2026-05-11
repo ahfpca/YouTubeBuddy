@@ -89,6 +89,8 @@ const progressText      = document.getElementById('progress-text')
 const statusBanner      = document.getElementById('status-banner')
 const pageContext       = document.getElementById('page-context')
 const confirmChk        = document.getElementById('confirm-before-run')
+const bulkDelaySlider   = document.getElementById('bulk-delay')
+const delayValueDisplay = document.getElementById('delay-value')
 const btnSaveSettings   = document.getElementById('btn-save-settings')
 const btnClearCache     = document.getElementById('btn-clear-cache')
 const historyList       = document.getElementById('history-list')
@@ -297,11 +299,12 @@ chrome.runtime.onMessage.addListener((message) => {
 
 // ── Settings: load & save ─────────────────────────────────────────────────────
 async function loadSettings() {
-    const { defaultLanguage, confirmBeforeRun, channelLanguageLabel } =
+    const { defaultLanguage, confirmBeforeRun, channelLanguageLabel, bulkDelaySeconds } =
         await chrome.storage.sync.get({
             defaultLanguage: '',
             confirmBeforeRun: true,
             channelLanguageLabel: '',
+            bulkDelaySeconds: 30,
         })
     if (defaultLanguage) {
         langSelect.value       = defaultLanguage
@@ -312,7 +315,13 @@ async function loadSettings() {
         channelLangSel.value = channelLanguageLabel
     }
     confirmChk.checked = confirmBeforeRun
+    bulkDelaySlider.value       = bulkDelaySeconds
+    delayValueDisplay.textContent = `${bulkDelaySeconds}s`
 }
+
+bulkDelaySlider.addEventListener('input', () => {
+    delayValueDisplay.textContent = `${bulkDelaySlider.value}s`
+})
 
 btnClearCache.addEventListener('click', async () => {
     await chrome.storage.local.set({ ytbProcessedCache: [] })
@@ -325,6 +334,7 @@ btnSaveSettings.addEventListener('click', async () => {
         defaultLanguage: defaultLangSel.value,
         confirmBeforeRun: confirmChk.checked,
         channelLanguageLabel: channelLangSel.value,
+        bulkDelaySeconds: parseInt(bulkDelaySlider.value, 10),
     })
     btnSaveSettings.textContent = 'Saved ✓'
     setTimeout(() => { btnSaveSettings.textContent = 'Save Settings' }, 1500)

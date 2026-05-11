@@ -326,6 +326,29 @@ body {
   margin-top: 2px;
 }
 
+/* ── Range slider ── */
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.field-label-row .field-label { margin-bottom: 0; }
+
+.delay-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--red);
+}
+
+.range-input {
+  width: 100%;
+  accent-color: var(--red);
+  cursor: pointer;
+  margin-top: 2px;
+}
+
 /* ── Footer ── */
 .footer {
   background: var(--surface);

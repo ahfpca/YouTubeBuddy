@@ -85,6 +85,14 @@
             Confirm before running on multiple videos
           </label>
         </div>
+        <div class="field-group">
+          <div class="field-label-row">
+            <label class="field-label" for="bulk-delay">Bulk Processing Delay</label>
+            <span id="delay-value" class="delay-value">30s</span>
+          </div>
+          <input type="range" id="bulk-delay" class="range-input" min="30" max="60" step="5" value="30" />
+          <p class="field-hint">Pause between each video in bulk mode (30–60 s).</p>
+        </div>
         <button id="btn-save-settings" class="btn-secondary">Save Settings</button>
         <button id="btn-clear-cache" class="btn-secondary btn-danger">Clear Skip Cache</button>
       </section>

@@ -86,8 +86,9 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
     const failedTitles = []
     const startTime  = Date.now()
 
-    // Load the persistent skip-cache for this language.
+    // Load the persistent skip-cache and the inter-video delay setting.
     const { ytbProcessedCache = [] } = await chrome.storage.local.get({ ytbProcessedCache: [] })
+    const { bulkDelaySeconds = 30 }  = await chrome.storage.sync.get({ bulkDelaySeconds: 30 })
     const processedCache = new Set(ytbProcessedCache)
     const cacheKey = (video) => `${video.videoId}::${video.type ?? 'video'}::${langLabel}`
 
@@ -168,6 +169,12 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
             failedTitles.push(video.title)
             log(`Error on "${video.title}": ${err.message}`)
         }
+
+        // Pause between videos to reduce load on YouTube servers.
+        // Cache-hit skips bypass this via `continue` above, so only actual
+        // processing attempts get the delay.
+        log(`Waiting ${bulkDelaySeconds}s before next video…`)
+        await keepaliveDelay(bulkDelaySeconds * 1000)
     }
 
     // Navigate back to channel page when done.
@@ -262,3 +269,16 @@ async function saveHistoryEntry(entry) {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+// Waits `ms` milliseconds in 5-second chunks, doing a chrome.storage read
+// between each chunk. MV3 service workers can be suspended during long
+// setTimeout calls — storage API calls count as activity and prevent that.
+async function keepaliveDelay(ms) {
+    const slice = 5000
+    let remaining = ms
+    while (remaining > 0) {
+        await sleep(Math.min(slice, remaining))
+        remaining -= slice
+        if (remaining > 0) await chrome.storage.local.get('ytbStopRequested')
+    }
+}

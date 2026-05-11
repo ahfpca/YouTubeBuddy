@@ -64,6 +64,12 @@ async function handleCurrentVideo(langCode, langLabel, silent = false) {
             if (result?.skipped) {
                 return { success: true, skipped: true, message: `"${langLabel}" already present — skipped.` }
             }
+            if (result?.noSubtitles) {
+                if (!silent) {
+                    return { success: false, message: 'This video has no subtitles available to publish.' }
+                }
+                return { success: true, skipped: true, message: 'No subtitles available — skipped.' }
+            }
             if (result?.retryNeeded) {
                 return { success: false, retryNeeded: true, message: 'Auto-translate not ready — retrying.' }
             }
@@ -317,9 +323,38 @@ async function stepNewMethod(langLabel, channelLangLabel) {
     log('"Edit subtitles" clicked')
     await sleep(800)
 
-    // 4. Publish the original-language subtitles (enables Auto-translate for other langs)
-    await waitForEditorOpen()
+    // 4. The Publish button appears disabled while the subtitle track is loading.
+    //    Wait for it to appear first, then wait for the spinner to clear before
+    //    re-checking its state. Only after loading is done can we tell whether
+    //    the video actually has subtitles (enabled) or not (still disabled → skip).
     await sleep(500)
+    await waitFor(
+        () => Array.from(document.querySelectorAll('ytcp-button, button'))
+            .find(b => /^publish$/i.test(b.textContent.trim()) && isVisible(b)),
+        15000,
+        'Publish button in subtitle editor'
+    )
+
+    // Wait for loading spinner to clear, then settle
+    await waitForCondition(
+        () => !document.querySelector(
+            'ytcp-spinner:not([hidden]), [class*="spinner"]:not([hidden]), [class*="loading"]:not([hidden])'
+        ),
+        15000
+    ).catch(() => {})
+    await sleep(1500)
+
+    // Re-check button state after content has loaded
+    const editorPublishBtn = Array.from(document.querySelectorAll('ytcp-button, button'))
+        .find(b => /^publish$/i.test(b.textContent.trim()) && isVisible(b))
+    if (!editorPublishBtn || editorPublishBtn.disabled || editorPublishBtn.getAttribute('aria-disabled') === 'true') {
+        log('Publish button still disabled — video has no subtitles, closing editor')
+        const closeBtn = document.querySelector('ytcp-icon-button#close-button')
+        if (closeBtn) dispatchRealClick(closeBtn)
+        await sleep(500)
+        return { noSubtitles: true }
+    }
+
     await clickPublish()
     log('Original-language subtitles published')
 
