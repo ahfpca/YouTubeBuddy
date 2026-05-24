@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Claude Code personal memory — never public
+.claude/
+
+# VS Code workspace file
+*.code-workspace
+
+# Packaged builds
+*.zip
+*.crx

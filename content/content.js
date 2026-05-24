@@ -28,12 +28,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 })
 
 // ── Main dispatch ─────────────────────────────────────────────────────────────
-async function handleAddSubtitleLanguage({ langCode, langLabel, silent = false }) {
-    return handleCurrentVideo(langCode, langLabel, silent)
+async function handleAddSubtitleLanguage({ langCode, langLabel, silent = false, autoSetAudience = true, longVideoMode = false }) {
+    return handleCurrentVideo(langCode, langLabel, silent, autoSetAudience, longVideoMode)
 }
 
 // ── Current video workflow ────────────────────────────────────────────────────
-async function handleCurrentVideo(langCode, langLabel, silent = false) {
+async function handleCurrentVideo(langCode, langLabel, silent = false, autoSetAudience = true, longVideoMode = false) {
     // Guard only applies for manual single-video use (not when called silently by background).
     if (!silent && /studio\.youtube\.com\/channel\/[^/]+(?:\/videos|\/shorts|$|\?)/.test(location.href)) {
         return {
@@ -52,15 +52,17 @@ async function handleCurrentVideo(langCode, langLabel, silent = false) {
     const stopDiscardGuard = startDiscardGuard()
 
     try {
-        log('Step 1 — Audience')
-        await stepAudience(channelLangLabel)
+        if (autoSetAudience) {
+            log('Step 1 — Audience')
+            await stepAudience(channelLangLabel)
+        }
 
         log('Step 2 — Detect UI method (Subtitles vs Languages tab)')
         const method = await detectTranslationMethod()
 
         if (method === 'new') {
             log('Steps 2-5 — New "Languages" tab method')
-            const result = await stepNewMethod(langLabel, channelLangLabel)
+            const result = await stepNewMethod(langLabel, channelLangLabel, longVideoMode)
             if (result?.skipped) {
                 return { success: true, skipped: true, message: `"${langLabel}" already present — skipped.` }
             }
@@ -90,7 +92,7 @@ async function handleCurrentVideo(langCode, langLabel, silent = false) {
             await stepDuplicateChannelLangAndPublish(channelLangLabel)
 
             log(`Step 5 — Add "${langLabel}" via Auto-Translate`)
-            const addResult = await stepAddTargetLanguage(langCode, langLabel, channelLangLabel)
+            const addResult = await stepAddTargetLanguage(langCode, langLabel, channelLangLabel, longVideoMode)
             if (addResult?.retryNeeded) {
                 return { success: false, retryNeeded: true, message: 'Auto-translate not ready — retrying.' }
             }
@@ -290,19 +292,21 @@ async function detectTranslationMethod() {
  *   Languages tab → Edit subtitles → Publish → Add language → pick lang →
  *   Add (Manual subtitles row) → Auto-translate → Publish → verify row
  */
-async function stepNewMethod(langLabel, channelLangLabel) {
+async function stepNewMethod(langLabel, channelLangLabel, longVideoMode = false) {
     // 1. Click "Languages" tab
     const langLink = findAnchorByText('Languages')
     langLink.click()
     await sleep(800)
 
-    // Wait for the translations list or "Add language" button to appear
+    // Wait for the translations list or "Add language" button to appear,
+    // then give Polymer a moment to finish rendering any existing language rows.
     await waitFor(
         () => document.querySelector('ytgn-video-translation-row, ytgn-video-translations-list') ||
               document.querySelector('button[aria-label="Add language"]'),
         10000,
         'Languages list'
     )
+    await sleep(400)
 
     // 2. Skip check — language already has published subtitles
     if (hasLanguageAlreadyNew(langLabel)) {
@@ -324,34 +328,48 @@ async function stepNewMethod(langLabel, channelLangLabel) {
     await sleep(800)
 
     // 4. The Publish button appears disabled while the subtitle track is loading.
-    //    Wait for it to appear first, then wait for the spinner to clear before
-    //    re-checking its state. Only after loading is done can we tell whether
-    //    the video actually has subtitles (enabled) or not (still disabled → skip).
-    await sleep(500)
-    await waitFor(
-        () => Array.from(document.querySelectorAll('ytcp-button, button'))
-            .find(b => /^publish$/i.test(b.textContent.trim()) && isVisible(b)),
-        15000,
-        'Publish button in subtitle editor'
-    )
+    //    The subtitle editor is a position:fixed modal, so isVisible() always returns
+    //    false there (offsetParent is null). Use a style-only check instead.
+    const isShownInModal = el => {
+        if (!el) return false
+        const s = getComputedStyle(el)
+        return s.display !== 'none' && s.visibility !== 'hidden' && parseFloat(s.opacity) > 0
+    }
+    const findEditorPublishBtn = () =>
+        Array.from(document.querySelectorAll('ytcp-button, button'))
+            .find(b => /^publish$/i.test(b.textContent.trim()) && isShownInModal(b))
 
-    // Wait for loading spinner to clear, then settle
+    await sleep(500)
+    // Wait for the button to appear in any state (enabled or disabled).
+    // If it never appears (timeout), treat the same as disabled — no subtitles.
+    const publishAppeared = await waitFor(findEditorPublishBtn, 5000, 'Publish button in subtitle editor')
+        .catch(() => null)
+
+    if (!publishAppeared) {
+        log('Publish button never appeared — no subtitles, closing editor')
+        const closeBtn = document.querySelector('#close-button')
+        if (closeBtn) closeBtn.click()
+        await sleep(600)
+        return { noSubtitles: true }
+    }
+
+    // Wait for the loading spinner to disappear, then settle.
+    // Long video mode extends this because the editor takes longer to hydrate a large track.
     await waitForCondition(
         () => !document.querySelector(
             'ytcp-spinner:not([hidden]), [class*="spinner"]:not([hidden]), [class*="loading"]:not([hidden])'
         ),
-        15000
+        longVideoMode ? 45000 : 15000
     ).catch(() => {})
     await sleep(1500)
 
-    // Re-check button state after content has loaded
-    const editorPublishBtn = Array.from(document.querySelectorAll('ytcp-button, button'))
-        .find(b => /^publish$/i.test(b.textContent.trim()) && isVisible(b))
+    // Re-check button state now that content has had time to load
+    const editorPublishBtn = findEditorPublishBtn()
     if (!editorPublishBtn || editorPublishBtn.disabled || editorPublishBtn.getAttribute('aria-disabled') === 'true') {
         log('Publish button still disabled — video has no subtitles, closing editor')
-        const closeBtn = document.querySelector('ytcp-icon-button#close-button')
-        if (closeBtn) dispatchRealClick(closeBtn)
-        await sleep(500)
+        const closeBtn = document.querySelector('#close-button')
+        if (closeBtn) closeBtn.click()
+        await sleep(600)
         return { noSubtitles: true }
     }
 
@@ -414,8 +432,9 @@ async function stepNewMethod(langLabel, channelLangLabel) {
     // Handle optional source-language selection dialog
     await maybeSelectTranslateFromChannelLang(channelLangLabel)
 
-    // 9. Publish the translated subtitles
-    await clickPublish(60000)
+    // 9. Publish the translated subtitles.
+    // Long video mode allows up to 5 min for YouTube to finish translating a large track.
+    await clickPublish(longVideoMode ? 300000 : 60000)
     log(`"${langLabel}" subtitles published (new method)`)
 
     // 10. Verify — wait for the Languages list to show "1 Published" for this lang
@@ -438,7 +457,7 @@ function hasLanguageAlreadyNew(langLabel) {
             const nameEl = row.querySelector('button.language-display-name')
             if (!nameEl || !nameEl.textContent.trim().includes(langLabel)) return false
             const statusEl = row.querySelector('ytgn-video-translation-cell-captions #status-container')
-            return statusEl && /1\s+published/i.test(statusEl.textContent.trim())
+            return statusEl && /\d+\s+published/i.test(statusEl.textContent.trim())
         })
 }
 
@@ -558,7 +577,7 @@ async function stepDuplicateChannelLangAndPublish(channelLangLabel) {
 }
 
 // ── Step 5: Add target language via Auto-Translate ────────────────────────────
-async function stepAddTargetLanguage(langCode, langLabel, channelLangLabel) {
+async function stepAddTargetLanguage(langCode, langLabel, channelLangLabel, longVideoMode = false) {
     // Click "Add language"
     const addLangBtn = await waitFor(
         () => Array.from(document.querySelectorAll('ytcp-button, button'))
@@ -622,10 +641,9 @@ async function stepAddTargetLanguage(langCode, langLabel, channelLangLabel) {
     // Handle optional "translate from" language dialog
     await maybeSelectTranslateFromChannelLang(channelLangLabel)
 
-    // Wait for the Publish button to appear (it becomes visible/enabled once the
-    // translation has loaded) then click it.  Use a long timeout because the
-    // translation can take a while to load.
-    await clickPublish(60000)
+    // Wait for the Publish button to become enabled once translation is done.
+    // Long video mode allows up to 5 min for YouTube to finish translating a large track.
+    await clickPublish(longVideoMode ? 300000 : 60000)
     log(`"${langLabel}" subtitles published`)
 
     await waitForSubtitleList()

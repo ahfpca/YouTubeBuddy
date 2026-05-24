@@ -88,7 +88,8 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
 
     // Load the persistent skip-cache and the inter-video delay setting.
     const { ytbProcessedCache = [] } = await chrome.storage.local.get({ ytbProcessedCache: [] })
-    const { bulkDelaySeconds = 30 }  = await chrome.storage.sync.get({ bulkDelaySeconds: 30 })
+    const { bulkDelaySeconds = 30, autoSetAudience = true, longVideoMode = false } =
+        await chrome.storage.sync.get({ bulkDelaySeconds: 30, autoSetAudience: true, longVideoMode: false })
     const processedCache = new Set(ytbProcessedCache)
     const cacheKey = (video) => `${video.videoId}::${video.type ?? 'video'}::${langLabel}`
 
@@ -130,7 +131,7 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
             await injectContentScript(tabId)
             const result = await sendMessageToTab(tabId, {
                 action: 'ADD_SUBTITLE_LANGUAGE',
-                payload: { langCode, langLabel, applyTo: 'current', silent: true },
+                payload: { langCode, langLabel, applyTo: 'current', silent: true, autoSetAudience, longVideoMode },
             })
 
             // If Auto-translate was not ready, re-navigate (bypasses beforeunload)
@@ -143,7 +144,7 @@ async function runBatch({ tabId, langCode, langLabel, channelPageUrl }) {
                 await injectContentScript(tabId)
                 finalResult = await sendMessageToTab(tabId, {
                     action: 'ADD_SUBTITLE_LANGUAGE',
-                    payload: { langCode, langLabel, applyTo: 'current', silent: true },
+                    payload: { langCode, langLabel, applyTo: 'current', silent: true, autoSetAudience, longVideoMode },
                 })
             }
 

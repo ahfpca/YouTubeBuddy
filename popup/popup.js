@@ -89,6 +89,8 @@ const progressText      = document.getElementById('progress-text')
 const statusBanner      = document.getElementById('status-banner')
 const pageContext       = document.getElementById('page-context')
 const confirmChk        = document.getElementById('confirm-before-run')
+const autoSetAudienceChk = document.getElementById('auto-set-audience')
+const longVideoModeChk   = document.getElementById('long-video-mode')
 const bulkDelaySlider   = document.getElementById('bulk-delay')
 const delayValueDisplay = document.getElementById('delay-value')
 const btnSaveSettings   = document.getElementById('btn-save-settings')
@@ -221,9 +223,11 @@ btnRun.addEventListener('click', async () => {
             // Script already injected or tab is not injectable — proceed anyway.
         }
 
+        const { autoSetAudience: autoSetAud, longVideoMode: longVid } =
+            await chrome.storage.sync.get({ autoSetAudience: true, longVideoMode: false })
         const response = await chrome.tabs.sendMessage(tab.id, {
             action: 'ADD_SUBTITLE_LANGUAGE',
-            payload: { langCode, langLabel, applyTo },
+            payload: { langCode, langLabel, applyTo, autoSetAudience: autoSetAud, longVideoMode: longVid },
         })
 
         const result  = response?.success ? (response?.skipped ? 'skipped' : 'success') : 'failed'
@@ -299,12 +303,14 @@ chrome.runtime.onMessage.addListener((message) => {
 
 // ── Settings: load & save ─────────────────────────────────────────────────────
 async function loadSettings() {
-    const { defaultLanguage, confirmBeforeRun, channelLanguageLabel, bulkDelaySeconds } =
+    const { defaultLanguage, confirmBeforeRun, channelLanguageLabel, bulkDelaySeconds, autoSetAudience, longVideoMode } =
         await chrome.storage.sync.get({
             defaultLanguage: '',
             confirmBeforeRun: true,
             channelLanguageLabel: '',
             bulkDelaySeconds: 30,
+            autoSetAudience: true,
+            longVideoMode: false,
         })
     if (defaultLanguage) {
         langSelect.value       = defaultLanguage
@@ -314,8 +320,10 @@ async function loadSettings() {
     if (channelLanguageLabel) {
         channelLangSel.value = channelLanguageLabel
     }
-    confirmChk.checked = confirmBeforeRun
-    bulkDelaySlider.value       = bulkDelaySeconds
+    confirmChk.checked           = confirmBeforeRun
+    autoSetAudienceChk.checked   = autoSetAudience
+    longVideoModeChk.checked     = longVideoMode
+    bulkDelaySlider.value        = bulkDelaySeconds
     delayValueDisplay.textContent = `${bulkDelaySeconds}s`
 }
 
@@ -335,6 +343,8 @@ btnSaveSettings.addEventListener('click', async () => {
         confirmBeforeRun: confirmChk.checked,
         channelLanguageLabel: channelLangSel.value,
         bulkDelaySeconds: parseInt(bulkDelaySlider.value, 10),
+        autoSetAudience: autoSetAudienceChk.checked,
+        longVideoMode: longVideoModeChk.checked,
     })
     btnSaveSettings.textContent = 'Saved ✓'
     setTimeout(() => { btnSaveSettings.textContent = 'Save Settings' }, 1500)
@@ -445,6 +455,20 @@ async function restoreBatchState() {
     progressText.textContent = 'Batch running…'
     showStatus('running', 'Batch in progress — click Stop to cancel.')
 }
+
+// ── Help tab: open GitHub docs link via chrome.tabs ──────────────────────────
+document.getElementById('btn-github-help').addEventListener('click', e => {
+    e.preventDefault()
+    chrome.tabs.create({ url: e.currentTarget.href })
+})
+
+// ── About tab: open PayPal links via chrome.tabs (popups block target=_blank) ──
+document.querySelectorAll('.donate-btn').forEach(a => {
+    a.addEventListener('click', e => {
+        e.preventDefault()
+        chrome.tabs.create({ url: a.href })
+    })
+})
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 populateLanguages()

@@ -18,6 +18,8 @@
         <button class="nav-btn active" data-tab="subtitles">Subtitles</button>
         <button class="nav-btn" data-tab="settings">Settings</button>
         <button class="nav-btn" data-tab="history">History</button>
+        <button class="nav-btn" data-tab="help">Help</button>
+        <button class="nav-btn" data-tab="about">About</button>
       </nav>
     </header>
 
@@ -86,6 +88,20 @@
           </label>
         </div>
         <div class="field-group">
+          <label class="field-label">
+            <input type="checkbox" id="auto-set-audience" checked />
+            Set "Not made for kids" automatically during automation
+          </label>
+          <p class="field-hint">If already set, the step is skipped without any changes.</p>
+        </div>
+        <div class="field-group">
+          <label class="field-label">
+            <input type="checkbox" id="long-video-mode" />
+            Long video mode
+          </label>
+          <p class="field-hint">Enable for videos longer than ~30 minutes. Extends translation timeouts to 5 minutes so YouTube has enough time to process large subtitle tracks.</p>
+        </div>
+        <div class="field-group">
           <div class="field-label-row">
             <label class="field-label" for="bulk-delay">Bulk Processing Delay</label>
             <span id="delay-value" class="delay-value">30s</span>
@@ -96,6 +112,73 @@
         <button id="btn-save-settings" class="btn-secondary">Save Settings</button>
         <button id="btn-clear-cache" class="btn-secondary btn-danger">Clear Skip Cache</button>
       </section>
+      <!-- Help Tab -->
+      <section id="tab-help" class="tab hidden">
+
+        <div class="help-section">
+          <div class="section-title">Before You Start</div>
+          <ul class="help-checklist">
+            <li>Open <strong>YouTube Studio</strong> (studio.youtube.com)</li>
+            <li>Set your <strong>Channel Language</strong> in Settings — the extension uses it as the base to duplicate from</li>
+            <li>Apply channel-wide settings like <strong>"Not made for kids"</strong> to all your videos — the plugin can handle this automatically during the automation run (toggle in Settings)</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <div class="section-title">How It Works</div>
+          <p class="help-body">The extension automates the multi-click workflow inside YouTube Studio. It opens the subtitle editor, selects your target language, and publishes — all without you touching the page. For bulk runs it repeats this for every video in the current tab (Videos, Shorts, or Live).</p>
+        </div>
+
+        <div class="help-section">
+          <div class="section-title">Be Patient</div>
+          <p class="help-body">Each step waits for YouTube Studio's interface to fully load before proceeding. Some steps can take <strong>up to 10 seconds</strong>, and a single video can take up to <strong>~30 seconds</strong> to complete. This is normal — do not navigate away while it runs.</p>
+          <p class="help-body" style="margin-top:8px">In bulk mode an additional <strong>30–60 second delay</strong> is added between videos (configurable in Settings) to avoid overloading YouTube's servers.</p>
+        </div>
+
+        <div class="help-section">
+          <div class="section-title">Limits &amp; Tips</div>
+          <ul class="help-checklist">
+            <li>Videos with <strong>no existing subtitles</strong> are skipped automatically — there is nothing to translate from</li>
+            <li>Processed videos are cached — re-runs are fast. Use <em>Clear Skip Cache</em> in Settings to reprocess them</li>
+            <li>Run the bulk process separately for the <strong>Videos</strong>, <strong>Shorts</strong>, and <strong>Live</strong> tabs</li>
+            <li>Test on a single video first before launching a bulk run</li>
+            <li>For videos longer than ~30 minutes, enable <strong>Long video mode</strong> in Settings — it gives YouTube up to 5 minutes to finish translating large subtitle tracks instead of the default 60 seconds</li>
+          </ul>
+        </div>
+
+        <a id="btn-github-help" href="https://github.com/ahfpca/YouTubeBuddy/wiki" class="btn-github">
+          📖 Full Documentation on GitHub
+        </a>
+
+      </section>
+
+      <!-- About Tab -->
+      <section id="tab-about" class="tab hidden">
+        <div class="about-app">
+          <img src="../icons/icon-48.png" alt="YouTubeBuddy" class="about-icon" />
+          <div class="about-app-name">YouTubeBuddy</div>
+          <div class="about-app-version">v1.0.0</div>
+          <p class="about-app-desc">Open-source Chrome extension for automating repetitive subtitle workflows in YouTube Studio.</p>
+        </div>
+
+        <div class="support-divider">
+          <span>Support this project</span>
+        </div>
+
+        <p class="support-tagline">If this tool saves you time, a small contribution goes a long way. ☕</p>
+
+        <div class="donate-grid">
+          <a href="https://paypal.me/ahfpca/5"   class="donate-btn" target="_blank" rel="noopener">$5</a>
+          <a href="https://paypal.me/ahfpca/10"  class="donate-btn" target="_blank" rel="noopener">$10</a>
+          <a href="https://paypal.me/ahfpca/20"  class="donate-btn" target="_blank" rel="noopener">$20</a>
+          <a href="https://paypal.me/ahfpca/50"  class="donate-btn" target="_blank" rel="noopener">$50</a>
+          <a href="https://paypal.me/ahfpca/100" class="donate-btn" target="_blank" rel="noopener">$100</a>
+          <a href="https://paypal.me/ahfpca/"    class="donate-btn donate-btn-custom" target="_blank" rel="noopener">Custom ↗</a>
+        </div>
+
+        <p class="support-note">Opens PayPal in a new tab. Thank you! ♥</p>
+      </section>
+
       <!-- History Tab -->
       <section id="tab-history" class="tab hidden">
         <div class="history-header">
