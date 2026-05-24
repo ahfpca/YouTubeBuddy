@@ -462,6 +462,12 @@ document.getElementById('btn-github-help').addEventListener('click', e => {
     chrome.tabs.create({ url: e.currentTarget.href })
 })
 
+// ── About tab: open GitHub feedback link via chrome.tabs ─────────────────────
+document.getElementById('btn-github-feedback').addEventListener('click', e => {
+    e.preventDefault()
+    chrome.tabs.create({ url: e.currentTarget.href })
+})
+
 // ── About tab: open PayPal links via chrome.tabs (popups block target=_blank) ──
 document.querySelectorAll('.donate-btn').forEach(a => {
     a.addEventListener('click', e => {
