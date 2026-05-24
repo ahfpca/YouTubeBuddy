@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — YouTubeBuddy</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 720px;
+      margin: 60px auto;
+      padding: 0 24px;
+      color: #1a1a1a;
+      line-height: 1.7;
+    }
+    h1 { font-size: 28px; margin-bottom: 4px; }
+    h2 { font-size: 18px; margin-top: 36px; }
+    p, li { font-size: 15px; color: #333; }
+    ul { padding-left: 20px; }
+    a { color: #065fd4; }
+    .meta { color: #666; font-size: 14px; margin-bottom: 40px; }
+  </style>
+</head>
+<body>
+
+  <h1>Privacy Policy</h1>
+  <p class="meta">YouTubeBuddy Chrome Extension &mdash; Last updated: May 2026</p>
+
+  <p>YouTubeBuddy is a Chrome extension that automates repetitive workflows inside YouTube Studio. This policy explains what data the extension stores and what it does not collect.</p>
+
+  <h2>Data We Do Not Collect</h2>
+  <p>YouTubeBuddy does <strong>not</strong>:</p>
+  <ul>
+    <li>Collect, transmit, or share any personal data</li>
+    <li>Make any external network requests</li>
+    <li>track usage, behaviour, or analytics</li>
+    <li>access your YouTube account credentials or tokens</li>
+    <li>communicate with any server outside your browser</li>
+  </ul>
+
+  <h2>Data Stored Locally in Your Browser</h2>
+  <p>The extension stores the following data exclusively in your browser using Chrome's built-in <code>chrome.storage</code> API. This data never leaves your device.</p>
+  <ul>
+    <li><strong>Settings</strong> (synced across your Chrome profile): your preferred language, channel language, automation options, and delay settings.</li>
+    <li><strong>Run history</strong> (local only): a log of past automation runs including video titles, results, and timestamps. Stored on your device only and can be cleared at any time from the History tab.</li>
+    <li><strong>Skip cache</strong> (local only): a list of video IDs that have already been processed, used to avoid re-processing in future bulk runs. Can be cleared at any time from Settings.</li>
+  </ul>
+
+  <h2>Permissions</h2>
+  <p>The extension requests the following Chrome permissions:</p>
+  <ul>
+    <li><strong>activeTab</strong> — to interact with the currently open YouTube Studio tab.</li>
+    <li><strong>scripting</strong> — to inject the automation script into YouTube Studio pages.</li>
+    <li><strong>storage</strong> — to save your settings and run history locally in your browser.</li>
+    <li><strong>Host permission for studio.youtube.com</strong> — the extension only operates on YouTube Studio and has no access to any other website.</li>
+  </ul>
+
+  <h2>Third-Party Services</h2>
+  <p>YouTubeBuddy does not integrate with any third-party analytics, advertising, or data collection services.</p>
+
+  <h2>Changes to This Policy</h2>
+  <p>If this policy changes, the updated version will be published at this URL with a revised date.</p>
+
+  <h2>Contact</h2>
+  <p>For questions or concerns, please open an issue on the
+    <a href="https://github.com/ahfpca/YouTubeBuddy" target="_blank" rel="noopener">GitHub repository</a>.
+  </p>
+
+</body>
+</html>
