@@ -7,6 +7,10 @@
 # VS Code workspace file
 *.code-workspace
 
+# npm (used for build scripts only — not part of the extension)
+package.json
+package-lock.json
+
 # Packaged builds
 *.zip
 *.crx
